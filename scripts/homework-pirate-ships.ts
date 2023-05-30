@@ -99,7 +99,7 @@ function generateRandomName() {
     );
 
   const collection_metadata = {
-    name: 'Seven Seas',
+    name: "Seven Seas",
     symbol: "7SEAS",
     description: faker.commerce.productDescription(),
     image:
@@ -152,7 +152,7 @@ function generateRandomName() {
   ];
 
   for (let i = 0; i < 32; i++) {
-    console.log(`==== Creating Ship ${i+1} ====`);
+    console.log(`==== Creating Ship ${i + 1} ====`);
     /**
      * define our ship's JSON metadata
      * checkout: https://nft.storage/ to help store images
@@ -172,31 +172,45 @@ function generateRandomName() {
     const { uri } = await metaplex.nfts().uploadMetadata(metadata);
 
     // create a new nft using the metaplex sdk
-    const { nft, response } = await metaplex.nfts().create({
-      uri,
-      name: metadata.name,
-      symbol: metadata.symbol,
+    let keepTrying;
+    let tries = 0;
+    do {
+      try {
+        const { nft, response } = await metaplex.nfts().create({
+          uri,
+          name: metadata.name,
+          symbol: metadata.symbol,
 
-      // `sellerFeeBasisPoints` is the royalty that you can define on nft
-      sellerFeeBasisPoints: 500, // Represents 5.00%.
+          // `sellerFeeBasisPoints` is the royalty that you can define on nft
+          sellerFeeBasisPoints: 500, // Represents 5.00%.
 
-      //
-      isMutable: true,
+          //
+          isMutable: true,
 
-      //
-      collection: collection_response.nft.address,
-    }, {
-      commitment: "confirmed",
-    });
+          //
+          collection: collection_response.nft.address,
+        });
+        printConsoleSeparator(`NFT created: ${nft.address.toBase58()}`);
+        console.log(explorerURL({ txSignature: response.signature }));
 
-    printConsoleSeparator(`NFT created: ${nft.address.toBase58()}`);
-    console.log(explorerURL({ txSignature: response.signature }));
-
-    // Verify collection ownership
-    const verify_response = await metaplex.nfts().verifyCollection({
-      collectionMintAddress: collection_response.nft.address,
-      mintAddress: nft.address,
-    });
+        // Verify collection ownership
+        const verify_response = await metaplex.nfts().verifyCollection({
+          collectionMintAddress: collection_response.nft.address,
+          mintAddress: nft.address,
+        });
+        keepTrying = false;
+      } catch (err) {
+        console.log(`Minting failed with error ${(err as Error).message} Trying ${5 - tries} more time`);
+        if (tries > 5) {
+          keepTrying = false;
+          return;
+        } else {
+          tries++;
+          await new Promise((resolve) => setTimeout(resolve, 5000))
+          keepTrying = true;
+        }
+      }
+    } while (keepTrying);
   }
 
   const tokenConfigs = [
