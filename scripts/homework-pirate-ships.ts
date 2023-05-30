@@ -99,8 +99,8 @@ function generateRandomName() {
     );
 
   const collection_metadata = {
-    name: generateRandomName(),
-    symbol: "SHIP",
+    name: 'Seven Seas',
+    symbol: "7SEAS",
     description: faker.commerce.productDescription(),
     image:
       "https://bafkreidf4cwzo36gm3stc2jlhzqaai44ufdtinpityei7gxgunowyv6ygu.ipfs.nftstorage.link/",
@@ -108,8 +108,8 @@ function generateRandomName() {
   const collection_upload_metadata = await metaplex.nfts().uploadMetadata(collection_metadata);
   const collection_response = await metaplex.nfts().create({
     uri: collection_upload_metadata.uri,
-    name: "Seven Seas",
-    symbol: "7SEAS",
+    name: collection_metadata.name,
+    symbol: collection_metadata.symbol,
     isCollection: true,
     sellerFeeBasisPoints: 100,
   });
