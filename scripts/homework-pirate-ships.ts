@@ -4,12 +4,25 @@
 
 // import custom helpers for demos
 import { payer, connection } from "@/lib/vars";
-import { explorerURL, loadPublicKeysFromFile, printConsoleSeparator } from "@/lib/helpers";
+import {
+  buildTransaction,
+  explorerURL,
+  extractSignatureFromFailedTransaction,
+  loadPublicKeysFromFile,
+  printConsoleSeparator,
+  savePublicKeyToFile,
+} from "@/lib/helpers";
 
-import { PublicKey } from "@solana/web3.js";
+import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import { Metaplex, bundlrStorage, keypairIdentity } from "@metaplex-foundation/js";
 
 import { faker } from "@faker-js/faker";
+import { MINT_SIZE, TOKEN_PROGRAM_ID, createInitializeMint2Instruction } from "@solana/spl-token";
+
+import {
+  PROGRAM_ID as METADATA_PROGRAM_ID,
+  createCreateMetadataAccountV3Instruction,
+} from "@metaplex-foundation/mpl-token-metadata";
 
 function generateRandomName() {
   const adjectives = [
@@ -85,13 +98,14 @@ function generateRandomName() {
       }),
     );
 
-    const collection_metadata = {
-      name: generateRandomName(),
-      symbol: "SHIP",
-      description: faker.commerce.productDescription(),
-      image: 'https://bafkreidf4cwzo36gm3stc2jlhzqaai44ufdtinpityei7gxgunowyv6ygu.ipfs.nftstorage.link/',
-    };
-    const collection_upload_metadata = await metaplex.nfts().uploadMetadata(collection_metadata);
+  const collection_metadata = {
+    name: generateRandomName(),
+    symbol: "SHIP",
+    description: faker.commerce.productDescription(),
+    image:
+      "https://bafkreidf4cwzo36gm3stc2jlhzqaai44ufdtinpityei7gxgunowyv6ygu.ipfs.nftstorage.link/",
+  };
+  const collection_upload_metadata = await metaplex.nfts().uploadMetadata(collection_metadata);
   const collection_response = await metaplex.nfts().create({
     uri: collection_upload_metadata.uri,
     name: "Seven Seas",
@@ -137,7 +151,7 @@ function generateRandomName() {
     "bafkreicumoxi3uyhwjce5rkazmmzf2uniyy3zo7g6lmjejn3cotel55iqy",
   ];
 
-  for (let i = 0; i < 32; i++) {
+  for (let i = 0; i < 2; i++) {
     console.log(`=== Creating Ship ${i} ===`);
     /**
      * define our ship's JSON metadata
@@ -153,7 +167,7 @@ function generateRandomName() {
     };
     // another ship: "https://bafybeiblld2wlxyivlivnhaqbcixhzxrodjzrycjkitz3kdmzj65gebwxe.ipfs.nftstorage.link/"
     // Captain Rajovenko: ""
-    
+
     // upload the JSON metadata
     const { uri } = await metaplex.nfts().uploadMetadata(metadata);
 
@@ -186,6 +200,138 @@ function generateRandomName() {
       mintAddress: nft.address,
     });
     console.log("Verify collection response", verify_response);
+  }
+
+  const tokenConfigs = [
+    {
+      // define how many decimals we want our tokens to have
+      decimals: 2,
+      //
+      name: "Seven Seas Gold",
+      //
+      symbol: "GOLD",
+      //
+      uri: "https://thisisnot.arealurl/info.json",
+    },
+    {
+      // define how many decimals we want our tokens to have
+      decimals: 2,
+      //
+      name: "Seven Seas Gold",
+      //
+      symbol: "GOLD",
+      //
+      uri: "https://thisisnot.arealurl/info.json",
+    },
+    {
+      // define how many decimals we want our tokens to have
+      decimals: 2,
+      //
+      name: "Seven Seas Rum",
+      //
+      symbol: "RUM",
+      //
+      uri: "https://thisisnot.arealurl/info.json",
+    },
+    {
+      // define how many decimals we want our tokens to have
+      decimals: 2,
+      //
+      name: "Seven Seas Cannons",
+      //
+      symbol: "CANNONS",
+      //
+      uri: "https://thisisnot.arealurl/info.json",
+    },
+  ];
+
+  const mintKeypair = Keypair.generate();
+
+  for (const tokenConfig of tokenConfigs) {
+    console.log("Creating", tokenConfig);
+    const createMintAccountInstruction = SystemProgram.createAccount({
+      fromPubkey: payer.publicKey,
+      newAccountPubkey: mintKeypair.publicKey,
+      // the `space` required for a token mint is accessible in the `@solana/spl-token` sdk
+      space: MINT_SIZE,
+      // store enough lamports needed for our `space` to be rent exempt
+      lamports: await connection.getMinimumBalanceForRentExemption(MINT_SIZE),
+      // tokens are owned by the "token program"
+      programId: TOKEN_PROGRAM_ID,
+    });
+
+    const initializeMintInstruction = createInitializeMint2Instruction(
+      mintKeypair.publicKey,
+      tokenConfig.decimals,
+      payer.publicKey,
+      payer.publicKey,
+    );
+
+    const metadataAccount = PublicKey.findProgramAddressSync(
+      [Buffer.from("metadata"), METADATA_PROGRAM_ID.toBuffer(), mintKeypair.publicKey.toBuffer()],
+      METADATA_PROGRAM_ID,
+    )[0];
+
+    console.log("Metadata address:", metadataAccount.toBase58());
+
+    const createMetadataInstruction = createCreateMetadataAccountV3Instruction(
+      {
+        metadata: metadataAccount,
+        mint: mintKeypair.publicKey,
+        mintAuthority: payer.publicKey,
+        payer: payer.publicKey,
+        updateAuthority: payer.publicKey,
+      },
+      {
+        createMetadataAccountArgsV3: {
+          data: {
+            creators: null,
+            name: tokenConfig.name,
+            symbol: tokenConfig.symbol,
+            uri: tokenConfig.uri,
+            sellerFeeBasisPoints: 0,
+            collection: null,
+            uses: null,
+          },
+          // `collectionDetails` - for non-nft type tokens, normally set to `null` to not have a value set
+          collectionDetails: null,
+          // should the metadata be updatable?
+          isMutable: true,
+        },
+      },
+    );
+
+    const tx = await buildTransaction({
+      connection,
+      payer: payer.publicKey,
+      signers: [payer, mintKeypair],
+      instructions: [
+        createMintAccountInstruction,
+        initializeMintInstruction,
+        createMetadataInstruction,
+      ],
+    });
+
+    try {
+      // actually send the transaction
+      const sig = await connection.sendTransaction(tx);
+
+      // print the explorer url
+      console.log("Transaction completed.");
+      console.log(explorerURL({ txSignature: sig }));
+
+      // locally save our addresses for the demo
+      savePublicKeyToFile("tokenMint", mintKeypair.publicKey);
+    } catch (err) {
+      console.error("Failed to send transaction:");
+      console.log(tx);
+
+      // attempt to extract the signature from the failed transaction
+      const failedSig = await extractSignatureFromFailedTransaction(connection, err);
+      if (failedSig) console.log("Failed signature:", explorerURL({ txSignature: failedSig }));
+
+      throw err;
+    }
   }
 
   return;
