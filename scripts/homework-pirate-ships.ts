@@ -151,8 +151,8 @@ function generateRandomName() {
     "bafkreicumoxi3uyhwjce5rkazmmzf2uniyy3zo7g6lmjejn3cotel55iqy",
   ];
 
-  for (let i = 0; i < 2; i++) {
-    console.log(`=== Creating Ship ${i} ===`);
+  for (let i = 0; i < 32; i++) {
+    console.log(`==== Creating Ship ${i+1} ====`);
     /**
      * define our ship's JSON metadata
      * checkout: https://nft.storage/ to help store images
@@ -171,8 +171,6 @@ function generateRandomName() {
     // upload the JSON metadata
     const { uri } = await metaplex.nfts().uploadMetadata(metadata);
 
-    console.log(uri);
-
     // create a new nft using the metaplex sdk
     const { nft, response } = await metaplex.nfts().create({
       uri,
@@ -187,11 +185,11 @@ function generateRandomName() {
 
       //
       collection: collection_response.nft.address,
+    }, {
+      commitment: "confirmed",
     });
 
-    console.log(nft);
-
-    printConsoleSeparator("NFT created:");
+    printConsoleSeparator(`NFT created: ${nft.address.toBase58()}`);
     console.log(explorerURL({ txSignature: response.signature }));
 
     // Verify collection ownership
@@ -199,7 +197,6 @@ function generateRandomName() {
       collectionMintAddress: collection_response.nft.address,
       mintAddress: nft.address,
     });
-    console.log("Verify collection response", verify_response);
   }
 
   const tokenConfigs = [
